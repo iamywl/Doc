@@ -1545,6 +1545,181 @@ ollama run llama3.1:8b  # 로컬 모델 파일에서 직접 로드
 
 ---
 
+## 9. 시스템 아키텍처 도식화 (Mermaid Diagrams)
+
+### 9.1 전체 시스템 아키텍처
+
+```mermaid
+graph TB
+    subgraph Client["클라이언트 계층"]
+        A1[React Native 모바일 앱]
+        A2[Next.js 웹 앱]
+        A3[ARS 전화 시스템]
+    end
+
+    subgraph Gateway["게이트웨이 계층"]
+        B1[Nginx Reverse Proxy<br/>SSL/TLS 1.3 + Rate Limiting]
+    end
+
+    subgraph API["API 서버 계층"]
+        C1[Node.js Express API :3000<br/>인증/인가/비즈니스 로직]
+        C2[FastAPI Python :8001<br/>ML 모델 서빙]
+    end
+
+    subgraph AI["AI 추론 계층 - RTX 4090 24GB"]
+        D1[Ollama :11434<br/>Llama 3.1 8B/70B]
+        D2[vLLM :8000<br/>고성능 배치 추론]
+        D3[Whisper large-v3<br/>STT 음성인식]
+        D4[VITS Korean TTS<br/>음성 합성]
+        D5[YOLOv8-nano<br/>이미지 인식]
+        D6[BGE-M3 Embedding<br/>벡터 검색]
+    end
+
+    subgraph Data["데이터 계층"]
+        E1[(PostgreSQL + pgvector<br/>관계형 DB + 벡터 검색)]
+        E2[(Redis<br/>캐시 + 세션)]
+        E3[NVMe SSD 2TB<br/>모델 파일 저장]
+    end
+
+    subgraph Infra["인프라 - 128GB RAM 서버"]
+        F1[Ubuntu 22.04 LTS]
+        F2[Docker Compose]
+        F3[Grafana + Prometheus<br/>모니터링]
+    end
+
+    A1 & A2 & A3 --> B1
+    B1 --> C1
+    C1 --> C2
+    C1 --> D1 & D2
+    C2 --> D3 & D4 & D5 & D6
+    C1 --> E1 & E2
+    D1 & D2 & D3 & D4 & D5 --> E3
+
+    style AI fill:#f9f,stroke:#333,stroke-width:2px
+    style Data fill:#bbf,stroke:#333,stroke-width:2px
+```
+
+### 9.2 LLM 추론 파이프라인 (데이터 흐름)
+
+```mermaid
+sequenceDiagram
+    participant U as 사용자
+    participant App as 모바일 앱
+    participant API as Node.js API
+    participant RAG as pgvector RAG
+    participant LLM as Ollama/vLLM
+    participant DB as PostgreSQL
+
+    U->>App: 메시지 입력
+    App->>API: WebSocket 전송
+    API->>DB: 대화 이력 조회
+    DB-->>API: 이전 대화 컨텍스트
+    API->>RAG: 관련 문서 검색 (Embedding)
+    RAG-->>API: Top-5 유사 문서
+    API->>API: 프롬프트 조립<br/>(시스템 + 컨텍스트 + RAG + 사용자 입력)
+    API->>LLM: 추론 요청 (stream=true)
+    loop 토큰 스트리밍
+        LLM-->>API: 토큰 chunk
+        API-->>App: SSE/WebSocket 스트리밍
+        App-->>U: 실시간 텍스트 표시
+    end
+    API->>DB: 대화 기록 저장
+    API->>API: 안전성 필터링 + 감정 분석
+```
+
+### 9.3 Fine-tuning (QLoRA) 워크플로우
+
+```mermaid
+flowchart LR
+    subgraph DataPrep["1. 데이터 준비"]
+        A1[원본 데이터 수집<br/>AI Hub, 크롤링] --> A2[데이터 정제<br/>중복 제거, 포맷 통일]
+        A2 --> A3[JSONL 변환<br/>instruction/input/output]
+    end
+
+    subgraph Training["2. QLoRA 학습"]
+        B1[Base Model 로드<br/>Llama 3.1 8B 4-bit] --> B2[LoRA 어댑터 부착<br/>r=64, alpha=16]
+        B2 --> B3[SFTTrainer 학습<br/>3 epochs, lr=2e-4]
+        B3 --> B4[어댑터 저장<br/>~50MB LoRA weights]
+    end
+
+    subgraph Deploy["3. 배포"]
+        C1[GGUF 변환<br/>Q4_K_M 양자화] --> C2[Ollama Modelfile<br/>커스텀 모델 등록]
+        C2 --> C3[서비스 투입<br/>ollama serve]
+    end
+
+    A3 --> B1
+    B4 --> C1
+
+    style Training fill:#ffe0b2,stroke:#e65100
+    style Deploy fill:#c8e6c9,stroke:#2e7d32
+```
+
+### 9.4 모델 메모리 배분 다이어그램
+
+```mermaid
+pie title "128GB RAM 메모리 배분 (70B 모델 운영 시)"
+    "Llama 3.1 70B offload (45 layers)" : 18
+    "KV-cache (RAM)" : 8
+    "Whisper large-v3 (CPU)" : 6
+    "PostgreSQL + pgvector" : 8
+    "Redis 캐시" : 4
+    "Node.js 서버 (V8 힙)" : 4
+    "Embedding 모델 (BGE-M3)" : 1
+    "VITS TTS" : 1
+    "OS + 시스템" : 8
+    "배치 처리 버퍼" : 10
+    "여유 (안전 마진)" : 60
+```
+
+---
+
+## 10. 컴퓨터공학과 학생의 기술적 강점
+
+### 10.1 왜 컴퓨터공학과 학생이 이 프로젝트의 최적 창업자인가
+
+본 로컬 LLM 인프라 프로젝트는 **컴퓨터공학 전공자의 핵심 역량**이 직접적으로 요구되는 기술 집약적 프로젝트이다. 다음은 컴퓨터공학과 교과과정에서 습득하는 역량과 본 프로젝트의 기술 요구사항 간의 매핑이다.
+
+| 교과목 | 습득 역량 | 프로젝트 활용 영역 |
+|--------|----------|-------------------|
+| **운영체제** | 프로세스/메모리 관리, 가상메모리, 스케줄링 | GPU/RAM offload 최적화, KV-cache 관리, Docker 컨테이너 운영 |
+| **컴퓨터 아키텍처** | CPU/GPU 구조, 메모리 계층, 병렬 처리 | CUDA 프로그래밍, GPU 레이어 배분, 양자화(Q4_K_M) 이해 |
+| **데이터베이스** | SQL, 인덱싱, 트랜잭션 | PostgreSQL + pgvector 벡터 검색, HNSW 인덱스 설계 |
+| **소프트웨어 공학** | 설계 패턴, CI/CD, 테스트 | Docker Compose 배포, GitHub Actions, 마이크로서비스 설계 |
+| **인공지능/기계학습** | 딥러닝, NLP, 모델 학습 | LLM 파인튜닝(QLoRA), 프롬프트 엔지니어링, 감정 분석 |
+| **컴퓨터 네트워크** | TCP/IP, HTTP, WebSocket | API 서버, 리버스 프록시, SSL/TLS, 실시간 스트리밍 |
+| **정보보호** | 암호화, 인증, 접근 제어 | E2E 암호화, JWT 인증, 개인정보보호법 기술적 조치 |
+| **알고리즘** | 최적화, 자료구조 | 매칭 알고리즘, 코사인 유사도 검색, 배치 스케줄링 |
+
+### 10.2 대학생 팀의 실현 가능성
+
+**기술적 실현 가능성이 높은 근거:**
+
+1. **오픈소스 생태계 활용**: Ollama, vLLM, llama.cpp, HuggingFace 등 모두 오픈소스로 라이선스 비용 0원. 대학생이 무료로 접근 가능한 최첨단 AI 인프라 [5][7]
+2. **대학 GPU 자원 활용**: 대부분의 공학 대학은 NVIDIA GPU 클러스터를 보유하고 있으며, 학생 연구 목적으로 무료 사용 가능
+3. **클라우드 스타트업 크레딧**: AWS Activate($10,000), Google Cloud for Startups($100,000), Azure for Startups($150,000) 등 학생 창업자 대상 무료 크레딧 프로그램 활용 가능
+4. **Kaggle/HuggingFace 커뮤니티**: 파인튜닝 코드, 데이터셋, 벤치마크가 공개되어 있어 학습 곡선이 낮음
+5. **예비창업패키지 사업비**: 최대 1억원의 사업비 중 서버 구축(1,000만원)에 충분히 투자 가능
+
+**컴공 학생 팀이 6개월 내 구현 가능한 범위:**
+
+| 기간 | 작업 | 난이도 | 학부 수준 가능 여부 |
+|------|------|--------|-------------------|
+| M1-M2 | Ollama 설치 + 8B 모델 서빙 | 쉬움 | 충분히 가능 (CLI 명령어 수준) |
+| M2-M3 | Node.js API + PostgreSQL 연동 | 보통 | 웹 프로그래밍 수강자 가능 |
+| M3-M4 | QLoRA 파인튜닝 (HuggingFace/Unsloth) | 보통~어려움 | ML 수업 수강자 가능, 튜토리얼 풍부 |
+| M4-M5 | React Native 앱 개발 | 보통 | 모바일 프로그래밍 경험자 가능 |
+| M5-M6 | Docker 배포 + 모니터링 | 보통 | DevOps 관련 수업 수강자 가능 |
+
+### 10.3 학술적 성과 창출 가능성
+
+본 프로젝트는 학술 논문 발표 및 졸업 프로젝트로도 활용 가능하다:
+
+- **한국어 LLM 파인튜닝 성능 벤치마크 논문**: 도메인별(상담, 식품, 돌봄 등) 파인튜닝 결과를 KCC(한국컴퓨터종합학술대회), HCLT(한글 및 한국어정보처리 학술대회) 등에 발표
+- **로컬 LLM 서빙 최적화 연구**: 소비자급 GPU에서의 대형 모델 추론 최적화 기법을 논문으로 발표
+- **개인정보보호 AI 아키텍처 설계**: 민감 데이터 처리를 위한 온프레미스 AI 시스템 설계를 정보보호 학회에 발표
+
+---
+
 ## 참고문헌
 
 ### LLM 모델
